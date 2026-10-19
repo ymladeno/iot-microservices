@@ -1,0 +1,41 @@
+
+services:
+  telemetry:
+    build:
+      context: ./services/telemetry
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      - analytics
+    restart: unless-stopped
+
+  analytics:
+    build:
+      context: ./services/analytics
+    ports:
+      - "127.0.0.1:8001:8001"
+    environment:
+      DATABASE_URL: postgresql://iot_user:iot_password@postgres:5432/iot_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: iot_user
+      POSTGRES_PASSWORD: iot_password
+      POSTGRES_DB: iot_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iot_user -d iot_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
