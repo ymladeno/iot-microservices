@@ -7,3 +7,8 @@ CREATE TABLE IF NOT EXISTS measurements (
 
 CREATE INDEX IF NOT EXISTS idx_measurements_device_id
     ON measurements(device_id);
+
+CREATE TABLE IF NOT EXISTS device_versions (
+    device_id INTEGER PRIMARY KEY,
+    version BIGINT NOT NULL DEFAULT 0
+);
