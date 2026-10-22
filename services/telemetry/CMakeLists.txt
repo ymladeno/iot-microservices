@@ -15,15 +15,16 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(Crow)
 
-find_package(CURL REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(RDKAFKA REQUIRED IMPORTED_TARGET rdkafka)
 
 add_executable(telemetry
     src/main.cpp
+    src/KafkaProducer.cpp
 )
 
-target_link_libraries(telemetry
-    PRIVATE
-        Crow::Crow
-        CURL::libcurl
+target_link_libraries(telemetry PRIVATE
+    Crow::Crow
+    PkgConfig::RDKAFKA
 )
 

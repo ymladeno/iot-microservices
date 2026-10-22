@@ -5,11 +5,13 @@ FROM ubuntu:22.04 AS builder
 RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
+    pkg-config \
     git \
     libasio-dev \
     libssl-dev \
     libcurl4-openssl-dev \
     ca-certificates \
+    librdkafka-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -29,6 +31,7 @@ RUN apt-get update && apt-get install -y \
     libgcc-s1 \
     ca-certificates \
     libcurl4 \
+    librdkafka1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
