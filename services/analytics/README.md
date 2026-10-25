@@ -19,3 +19,19 @@ python -m pip install -r services/analytics/requirements.txt
 docker compose up -d --build analytics
 
 docker compose logs -f analytics
+
+## read Kafka messages
+docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
+  --bootstrap-server kafka:29092 \
+  --topic measurements \
+  --from-beginning \
+  --timeout-ms 5000
+
+## inspect analytics-workers LAG
+docker compose exec kafka /opt/kafka/bin/kafka-consumer-groups.sh \
+  --bootstrap-server kafka:29092 \
+  --describe \
+  --group analytics-workers
+
+## execute sql requests
+docker compose exec -T postgres psql -U iot_user -d iot_db

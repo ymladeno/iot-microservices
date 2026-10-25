@@ -19,21 +19,38 @@ consumer = Consumer({
 consumer.subscribe(["measurements"])
 
 
-def store_measurement(measurement: Measurement):
+def store_measurement(measurement: Measurement, msg):
     with psycopg.connect(DATABASE_URL) as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
                 INSERT INTO measurements
-                    (device_id, temperature, timestamp)
-                VALUES (%s, %s, %s)
+                    (device_id, temperature, timestamp,
+                     kafka_topic, kafka_partition, kafka_offset)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT
+                    (kafka_topic, kafka_partition, kafka_offset)
+                DO NOTHING
+                RETURNING id
                 """,
                 (
                     measurement.device_id,
                     measurement.temperature,
                     measurement.timestamp,
+                    msg.topic(),
+                    msg.partition(),
+                    msg.offset(),
                 ),
             )
+
+            inserted = cur.fetchone()
+
+            if inserted is None:
+                print(
+                    f"Duplicate Kafka message at offset {msg.offset()}",
+                    flush=True,
+                )
+                return
 
             cur.execute(
                 """
@@ -65,7 +82,7 @@ try:
             data = json.loads(msg.value())
             measurement = Measurement.model_validate(data)
 
-            store_measurement(measurement)
+            store_measurement(measurement, msg)
 
             # Commit Kafka offset only after PostgreSQL commits.
             consumer.commit(message=msg, asynchronous=False)
