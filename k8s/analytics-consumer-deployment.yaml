@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-consumer
+
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: analytics-consumer
+
+  template:
+    metadata:
+      labels:
+        app: analytics-consumer
+
+    spec:
+      containers:
+        - name: analytics-consumer
+          image: iot-analytics-consumer:latest
+          imagePullPolicy: Never
+
+          command:
+            - python
+            - -m
+            - app.consumer
+
+          env:
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "kafka:29092"
+
+            - name: DATABASE_URL
+              value: "postgresql://iot_user:iot_password@postgres:5432/iot_db"
+
+            - name: REDIS_URL
+              value: "redis://redis:6379/0"
+
+          resources:
+            requests:
+              memory: 64Mi
+              cpu: 50m
+            limits:
+              memory: 256Mi
+              cpu: 500m

@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics
+
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: analytics
+
+  template:
+    metadata:
+      labels:
+        app: analytics
+
+    spec:
+      containers:
+        - name: analytics
+          image: iot-analytics:latest
+          imagePullPolicy: Never
+
+          ports:
+            - containerPort: 8001
+
+          env:
+            - name: DATABASE_URL
+              value: "postgresql://iot_user:iot_password@postgres:5432/iot_db"
+
+            - name: REDIS_URL
+              value: "redis://redis:6379/0"
+
+          readinessProbe:
+            httpGet:
+              path: /openapi.json
+              port: 8001
+            initialDelaySeconds: 5
+            periodSeconds: 5
+
+          resources:
+            requests:
+              memory: 64Mi
+              cpu: 50m
+            limits:
+              memory: 256Mi
+              cpu: 500m

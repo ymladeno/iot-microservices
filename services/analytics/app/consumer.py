@@ -1,11 +1,20 @@
 import json
+import logging
 import os
 
 import psycopg
 from confluent_kafka import Consumer, KafkaException
 from pydantic import ValidationError
 
-from app.main import Measurement
+from app.models import Measurement
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
+
+logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 
@@ -19,7 +28,7 @@ consumer = Consumer({
 consumer.subscribe(["measurements"])
 
 
-def store_measurement(measurement: Measurement, msg):
+def store_measurement(measurement: Measurement, msg) -> bool:
     with psycopg.connect(DATABASE_URL) as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -46,11 +55,7 @@ def store_measurement(measurement: Measurement, msg):
             inserted = cur.fetchone()
 
             if inserted is None:
-                print(
-                    f"Duplicate Kafka message at offset {msg.offset()}",
-                    flush=True,
-                )
-                return
+                return False
 
             cur.execute(
                 """
@@ -63,50 +68,71 @@ def store_measurement(measurement: Measurement, msg):
                 (measurement.device_id,),
             )
 
+    return True
 
-print("Analytics Kafka consumer started", flush=True)
 
-try:
-    while True:
-        msg = consumer.poll(1.0)
+def main():
+    logger.info("Analytics Kafka consumer started")
 
-        if msg is None:
-            continue
+    try:
+        while True:
+            msg = consumer.poll(1.0)
 
-        if msg.error():
-            print(f"Kafka error: {msg.error()}", flush=True)
-            continue
+            if msg is None:
+                continue
 
-        try:
-            print(f"Received raw message: {msg.value()!r}", flush=True)
-            data = json.loads(msg.value())
-            measurement = Measurement.model_validate(data)
+            if msg.error():
+                logger.error("Kafka error: %s", msg.error())
+                continue
 
-            store_measurement(measurement, msg)
+            try:
+                logger.debug("Received raw message: %r", msg.value())
 
-            # Commit Kafka offset only after PostgreSQL commits.
-            consumer.commit(message=msg, asynchronous=False)
+                data = json.loads(msg.value())
+                measurement = Measurement.model_validate(data)
 
-            print(
-                f"Stored device {measurement.device_id}",
-                flush=True,
-            )
+                inserted = store_measurement(measurement, msg)
 
-        except (ValueError, ValidationError) as error:
-            print(
-                f"Invalid message at offset {msg.offset()}: "
-                f"{msg.value()!r} - {error}",
-                flush=True,
-            )
-            consumer.commit(message=msg, asynchronous=False)
-            continue
+                # Commit Kafka offset only after PostgreSQL commits.
+                consumer.commit(message=msg, asynchronous=False)
 
-        except (psycopg.Error, KafkaException) as error:
-            print(f"Processing failed: {error}", flush=True)
+                if inserted:
+                    logger.info(
+                        "Stored device %s (partition=%s, offset=%s)",
+                        measurement.device_id,
+                        msg.partition(),
+                        msg.offset(),
+                    )
+                else:
+                    logger.info(
+                        "Duplicate Kafka message (partition=%s, offset=%s)",
+                        msg.partition(),
+                        msg.offset(),
+                    )
 
-            # Stop rather than skipping a failed measurement.
-            # On restart, Kafka can redeliver it.
-            raise
+            except (ValueError, ValidationError) as error:
+                logger.warning(
+                    "Invalid message at offset %s: %r - %s",
+                    msg.offset(),
+                    msg.value(),
+                    error,
+                )
 
-finally:
-    consumer.close()
+                # Skip invalid messages by committing their offsets.
+                consumer.commit(message=msg, asynchronous=False)
+
+            except Exception:
+                logger.exception("Measurement processing failed")
+
+                # Stop rather than skipping a failed measurement.
+                # Kubernetes can restart the consumer.
+                # Kafka can redeliver the uncommitted message.
+                raise
+
+    finally:
+        consumer.close()
+        logger.info("Analytics Kafka consumer stopped")
+
+
+if __name__ == "__main__":
+    main()

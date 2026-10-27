@@ -36,3 +36,11 @@ docker compose exec postgres bash
 
 ##
 docker compose exec postgres psql -U iot_user -d iot_db
+
+##
+kubectl get deployments
+kubectl get pods
+kubectl logs deployment/telemetry
+
+kubectl rollout restart deployment/telemetry
+kubectl rollout status deployment/telemetry

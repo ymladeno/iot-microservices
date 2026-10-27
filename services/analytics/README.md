@@ -20,6 +20,12 @@ docker compose up -d --build analytics
 
 docker compose logs -f analytics
 
+## build the image
+docker compose build analytics
+
+##  load the image
+minikube image load iot-analytics:latest
+
 ## read Kafka messages
 docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
   --bootstrap-server kafka:29092 \
@@ -35,3 +41,20 @@ docker compose exec kafka /opt/kafka/bin/kafka-consumer-groups.sh \
 
 ## execute sql requests
 docker compose exec -T postgres psql -U iot_user -d iot_db
+
+
+kubectl exec -it deployment/kafka -- \
+  /opt/kafka/bin/kafka-console-consumer.sh \
+  --bootstrap-server kafka:29092 \
+  --topic measurements \
+  --from-beginning
+
+kubectl apply -f k8s/postgres-service.yaml
+kubectl apply -f k8s/postgres-statefulset.yaml
+kubectl rollout status statefulset/postgres --timeout=120s
+
+## check deployment syntax
+kubectl apply --dry-run=server -f k8s/postgres-statefulset.yaml
+
+## logs
+kubectl logs deployment/analytics-consumer --previous --tail=60

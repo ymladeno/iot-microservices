@@ -7,6 +7,8 @@ import redis
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+from app.models import Measurement
+
 app = FastAPI()
 
 DATABASE_URL = os.environ["DATABASE_URL"]
@@ -21,51 +23,8 @@ redis_client = redis.Redis.from_url(
 
 CACHE_TTL = 60
 
-class Measurement(BaseModel):
-    device_id: int
-    temperature: float
-    timestamp: datetime
-
-
 def stats_cache_key(device_id: int) -> str:
     return f"device:{device_id}:stats"
-
-def invalidate_cache(device_id: int):
-    try:
-        redis_client.delete(stats_cache_key(device_id))
-    except redis.RedisError as error:
-        print(f"Redis invalidation failed: {error}")
-
-@app.post("/measurements")
-def add_measurement(measurement: Measurement):
-    with psycopg.connect(DATABASE_URL) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO measurements
-                    (device_id, temperature, timestamp)
-                VALUES (%s, %s, %s)
-                """,
-                (
-                    measurement.device_id,
-                    measurement.temperature,
-                    measurement.timestamp,
-                ),
-            )
-
-            cur.execute(
-                """
-                INSERT INTO device_versions (device_id, version)
-                VALUES (%s, 1)
-                ON CONFLICT (device_id)
-                DO UPDATE SET version = device_versions.version + 1
-                """,
-                (measurement.device_id,),
-            )
-
-    print(f"Stored measurement: {measurement}")
-
-    return {"status": "stored"}
 
 @app.get("/devices/{device_id}/stats")
 def get_statistics(device_id: int):
